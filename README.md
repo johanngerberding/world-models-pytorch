@@ -14,4 +14,8 @@ You can use the `generate_vae_data.py` script to generate a dataset for training
 
 ## Todos 
 
-a lot 
+* create a training script for the VAE 
+* add image transforms for the VAE training 
+* create the controller model
+* create the memory model 
+
