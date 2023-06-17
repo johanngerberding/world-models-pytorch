@@ -39,12 +39,13 @@ class RolloutDataset(Dataset):
         file_idx = bisect(self.cum_size, idx) - 1
         seq_idx = idx - self.cum_size[file_idx] 
         data = self.buffer[file_idx] 
-        obs = data['observations'][seq_idx] 
+        obs = data['observations'][seq_idx]
         # using albumentation for transforms 
         if self.transform: 
             transformed = self.transform(image=obs)
             obs = transformed['image']
         obs = torch.tensor(obs).float()
+        obs = obs / 255.
         return obs  
 
     def load_next_buffer(self):

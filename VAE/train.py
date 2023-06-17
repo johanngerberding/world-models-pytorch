@@ -1,5 +1,8 @@
+import os 
 import torch 
-import albumentations as A 
+import datetime 
+import albumentations as A
+from torchvision.utils import save_image 
 
 from dataset import RolloutDataset
 from model import VAE
@@ -45,16 +48,25 @@ def loss_fn(reconst, x, mu, logsigma):
     KLD = -0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - (2 * logsigma).exp())
     return BCE + KLD
 
+
 data_dir = "/home/mojo/dev/world-models-pytorch/data" 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-num_epochs = 10
-latent_size = 512
-train_batch_size = 256 
+num_epochs = 50
+latent_size = 1024 
+train_batch_size = 512 
 test_batch_size = 128 
 learning_rate = 0.01
 height = 64 
 width = 64
+
+td = datetime.datetime.now().strftime("%Y-%m-%d")
+exp_dir = f"/home/mojo/dev/world-models-pytorch/VAE/exps/{td}_bs_{train_batch_size}_epochs_{num_epochs}_latentsize_{latent_size}"
+os.makedirs(exp_dir, exist_ok=False)
+weights_dir = os.path.join(exp_dir, "weights")
+os.makedirs(weights_dir)
+samples_dir = os.path.join(exp_dir, "samples")
+os.makedirs(samples_dir)
 
 train_transform = A.Compose(
     [
@@ -101,8 +113,25 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer=optimizer, mode='min', factor=0.5, patience=5)
 
+best = 1_000_000
+
 for epoch in range(1, num_epochs + 1):
     print(f"Training Epoch {epoch}")
     train_epoch(epoch)
     test_loss = test_epoch()
+
+    if test_loss < best: 
+        best = test_loss
+        torch.save(model.state_dict(), os.path.join(weights_dir, "best.pth"))
+        print(f"New best model from epoch {epoch}")
+
+    with torch.no_grad(): 
+        # this only works if height == width
+        sample = torch.randn(height, latent_size).to(device)
+        sample = model.decoder(sample).cpu()
+        # this assumes normalization x/255. 
+        save_image(sample, os.path.join(samples_dir, f"sample_{epoch}.png"))
+
+
+torch.save(model.state_dict(), os.path.join(weights_dir, "final.pth"))
 

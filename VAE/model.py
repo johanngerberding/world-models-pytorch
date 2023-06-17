@@ -25,7 +25,6 @@ class Encoder(nn.Module):
         x = F.relu(self.conv3(x)) 
         x = F.relu(self.conv4(x)) 
         x = x.view(x.size(0), -1) 
-        print(x.size()) 
 
         mu = self.fc_mu(x) 
         logsigma = self.fc_log_sigma(x)
@@ -88,5 +87,10 @@ if __name__ == "__main__":
     print(reconst.shape) 
     print(mu.shape)
     print(logsigma.shape)
+
+    with torch.no_grad():
+        test = torch.randn(64, 1024)
+        test = model.decoder(test).cpu()
+        print(test.size())
 
 
