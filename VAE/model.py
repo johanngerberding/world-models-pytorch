@@ -24,8 +24,9 @@ class Encoder(nn.Module):
         x = F.relu(self.conv2(x)) 
         x = F.relu(self.conv3(x)) 
         x = F.relu(self.conv4(x)) 
-        x = torch.flatten(x)  
-        
+        x = x.view(x.size(0), -1) 
+        print(x.size()) 
+
         mu = self.fc_mu(x) 
         logsigma = self.fc_log_sigma(x)
 
@@ -71,7 +72,6 @@ class VAE(nn.Module):
         eps = torch.randn_like(sigma)
         # z = mu + sigma * N(0,1)
         z = eps.mul(sigma).add_(mu) 
-        
         reconst = self.decoder(z)
         return reconst, mu, logsigma 
 
@@ -80,11 +80,10 @@ class VAE(nn.Module):
 
 if __name__ == "__main__":
 
-    test = torch.randn(1, 3 , 64, 64)
-    print(test.shape)
+    test = torch.randn(64, 3 , 64, 64)
     print(torch.cuda.is_available())    
     
-    model = VAE(32, 3)
+    model = VAE(1024, 3)
     reconst, mu, logsigma = model(test)
     print(reconst.shape) 
     print(mu.shape)

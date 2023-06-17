@@ -1,4 +1,5 @@
 import glob
+import torch 
 import numpy as np 
 from torch.utils.data import Dataset 
 from albumentations.core.composition import Compose
@@ -17,7 +18,6 @@ class RolloutDataset(Dataset):
         self.root = root 
         self.transform = transform
         self.files = glob.glob(self.root + "/**/*.npz", recursive=True)
-        print(len(self.files))        
         if train:
             self.files = self.files[:-num_test_files]
         else: 
@@ -40,8 +40,11 @@ class RolloutDataset(Dataset):
         seq_idx = idx - self.cum_size[file_idx] 
         data = self.buffer[file_idx] 
         obs = data['observations'][seq_idx] 
+        # using albumentation for transforms 
         if self.transform: 
-            obs = self.transform(obs)
+            transformed = self.transform(image=obs)
+            obs = transformed['image']
+        obs = torch.tensor(obs).float()
         return obs  
 
     def load_next_buffer(self):

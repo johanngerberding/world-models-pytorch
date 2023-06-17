@@ -48,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument('--rollouts', help="number of rollouts", type=int, default=10_000)
     parser.add_argument('--threads', help="number of threads", type=int, default=20)
     parser.add_argument('--seq_len', help="sequence length", type=int, default=1000)
-    parser.add_argument('--dir', help="output directory", type=str, default="data/vae")
+    parser.add_argument('--dir', help="output directory", type=str, default="~/world-models-pytorch/data/vae")
     args = parser.parse_args()
     
     os.makedirs(args.dir) 
