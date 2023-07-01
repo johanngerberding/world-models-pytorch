@@ -4,8 +4,8 @@ import datetime
 import albumentations as A
 from torchvision.utils import save_image 
 
-from dataset import ObservationDataset 
-from model import VAE
+from ..dataset import ObservationDataset 
+from ..models.vae import VAE
 
 def train_epoch(epoch: int) -> None:
     model.train() 
@@ -55,8 +55,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 50
 latent_size = 64 
-train_batch_size = 64 
-test_batch_size = 32 
+train_batch_size = 512 
+test_batch_size = 128 
 learning_rate = 0.001
 height = 64 
 width = 64

@@ -93,4 +93,3 @@ if __name__ == "__main__":
         test = model.decoder(test).cpu()
         print(test.size())
 
-
