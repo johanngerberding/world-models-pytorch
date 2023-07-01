@@ -2,3 +2,5 @@ __pycache__
 .env 
 data 
 exps
+.ipynb_checkpoints
+.dist 

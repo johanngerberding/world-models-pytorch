@@ -38,15 +38,11 @@ class RolloutDataset(Dataset):
         # binary search into cum_size to find the file where to look 
         file_idx = bisect(self.cum_size, idx) - 1
         seq_idx = idx - self.cum_size[file_idx] 
-        data = self.buffer[file_idx] 
-        obs = data['observations'][seq_idx]
-        # using albumentation for transforms 
-        if self.transform: 
-            transformed = self.transform(image=obs)
-            obs = transformed['image']
-        obs = torch.tensor(obs).float()
-        obs = obs / 255.
-        return obs  
+        data = self.buffer[file_idx]
+        return self._get_data(data, seq_idx)
+
+    def _get_data(self, data, idx): 
+        pass 
 
     def load_next_buffer(self):
         """Load next buffer, dataset is too big to store in ram""" 
@@ -61,7 +57,25 @@ class RolloutDataset(Dataset):
                 self.buffer += [{k: np.copy(v) for k, v in data.items()}]
                 self.cum_size += [self.cum_size[-1] + data['rewards'].shape[0]]
 
-            
+
+class ObservationDataset(RolloutDataset): 
+    def _get_data(self, data, idx: int):
+        obs = data['observations'][idx] 
+        if self.transform: 
+            transformed = self.transform(image=obs)
+            obs = transformed['image']
+        obs = torch.tensor(obs).float()
+        obs = obs / 255.
+        return obs
+
+
+class SequenceDataset(RolloutDataset): 
+    def _get_data(self, data, idx: int):
+        obs_data = data['observations']
+        
+        return None 
+
+
 
 if __name__ == "__main__":
     dataset = RolloutDataset("/home/mojo/dev/world-models-pytorch/data", None, True, 100, 600)

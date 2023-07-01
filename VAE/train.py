@@ -4,7 +4,7 @@ import datetime
 import albumentations as A
 from torchvision.utils import save_image 
 
-from dataset import RolloutDataset
+from dataset import ObservationDataset 
 from model import VAE
 
 def train_epoch(epoch: int) -> None:
@@ -25,6 +25,7 @@ def train_epoch(epoch: int) -> None:
         if batch_idx % 20 == 0: 
             print(f"train epoch: {epoch} [{batch_idx * len(data)}/{len(train_loader.dataset)}]\tloss: {loss.item() / len(data):.6f}")
 
+    print("---> Epoch: {} Average Loss: {:.4f}".format(epoch, train_loss / len(train_loader.dataset)))
 
 def test_epoch() -> float: 
     model.eval()
@@ -53,10 +54,10 @@ data_dir = "/home/mojo/dev/world-models-pytorch/data"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 50
-latent_size = 1024 
-train_batch_size = 512 
-test_batch_size = 128 
-learning_rate = 0.01
+latent_size = 64 
+train_batch_size = 64 
+test_batch_size = 32 
+learning_rate = 0.001
 height = 64 
 width = 64
 
@@ -81,7 +82,7 @@ test_transform = A.Compose(
     ]
 ) 
 
-train_dataset = RolloutDataset(
+train_dataset = ObservationDataset(
     root=data_dir, 
     transform=train_transform, 
     train=True, 
@@ -89,7 +90,7 @@ train_dataset = RolloutDataset(
     num_test_files=600,
 ) 
 
-test_dataset = RolloutDataset(
+test_dataset = ObservationDataset(
     root=data_dir, 
     transform=test_transform, 
     train=False,
@@ -113,12 +114,13 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer=optimizer, mode='min', factor=0.5, patience=5)
 
-best = 1_000_000
+best = 1_000_000_000
 
 for epoch in range(1, num_epochs + 1):
     print(f"Training Epoch {epoch}")
     train_epoch(epoch)
     test_loss = test_epoch()
+    scheduler.step(test_loss)
 
     if test_loss < best: 
         best = test_loss
