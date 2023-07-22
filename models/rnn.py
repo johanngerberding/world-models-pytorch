@@ -3,6 +3,7 @@ import torch.nn as nn
 
 
 class MDRNN(nn.Module):
+    """Model for multi-step forward"""
     def __init__(self, latents: int, actions: int, hiddens: int, gaussians: int):
         super().__init__()
         self.latents = latents # z  
@@ -24,7 +25,7 @@ class MDRNN(nn.Module):
         )
 
     def forward(self, actions: torch.Tensor, latents: torch.Tensor) -> tuple:
-        """""" 
+        """This is for the whole sequence [training]""" 
         seq_len, batch_size = actions.size(0), actions.size(1)
         inputs = torch.cat([actions, latents], dim=-1) 
         outs, _ = self.rnn(inputs)
@@ -46,4 +47,13 @@ class MDRNN(nn.Module):
         ds = mdn_outs[:, :, -1]
 
         return mus, sigmas, logpi, rs, ds 
+    
 
+class MRDNNCell(nn.Module):
+    """Model for one step forward"""
+    def __init__(self, latents: int, actions: int, hiddens: int, gaussians: int):
+        super().__init__() 
+        self.rnn = nn.LSTMCell(latents + actions, hiddens)
+    
+    def forward(self, action, latent, hidden):
+        pass
