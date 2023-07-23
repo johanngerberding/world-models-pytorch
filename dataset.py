@@ -98,11 +98,14 @@ class SequenceDataset(RolloutDataset):
 
 
 if __name__ == "__main__":
-    dataset = SequenceDataset("/home/mojo/dev/world-models-pytorch/data", None, True, 100, 600)
+    dataset = SequenceDataset("/home/mojo/dev/world-models-pytorch/data", None, True, 100, 600, 100)
     print(len(dataset))
     from torch.utils.data import DataLoader 
     dataloader = DataLoader(dataset, 4, shuffle=True)
 
-    for obs in dataloader: 
-        print(obs.shape)
+    for data in dataloader: 
+        print(len(data))
+        obs, action, reward, terminal, next_obs = data 
+        print(obs.shape) 
+        print(action.shape)
         break 
