@@ -70,15 +70,35 @@ class ObservationDataset(RolloutDataset):
 
 
 class SequenceDataset(RolloutDataset): 
+    def __init__(
+            self, 
+            root: str, 
+            transform: Compose, 
+            train: bool, 
+            buffer_size: int, 
+            num_test_files: int, 
+            seq_len: int
+        ):
+        super().__init__(root, transform, train, buffer_size, num_test_files) 
+        self.seq_len = seq_len
+    
     def _get_data(self, data, idx: int):
-        obs_data = data['observations']
+        obs_data = data['observations'][idx:idx + self.seq_len + 1]
+        if self.transform: 
+            transformed_obs = self.transform(image=obs_data.astype(np.float32))
+            obs_data = transformed_obs['image']
+        obs, next_obs = obs_data[:-1], obs_data[1:]
+        action = data['actions'][idx:idx + self.seq_len + 1]
+        action = action.astype(np.float32)
+        reward = data['rewards'][idx+1:idx + self.seq_len + 1].astype(np.float32)
+        terminal = data['terminals'][idx+1:idx + self.seq_len + 1].astype(np.float32)
         
-        return None 
+        return obs, action, reward, terminal, next_obs 
 
 
 
 if __name__ == "__main__":
-    dataset = RolloutDataset("/home/mojo/dev/world-models-pytorch/data", None, True, 100, 600)
+    dataset = SequenceDataset("/home/mojo/dev/world-models-pytorch/data", None, True, 100, 600)
     print(len(dataset))
     from torch.utils.data import DataLoader 
     dataloader = DataLoader(dataset, 4, shuffle=True)

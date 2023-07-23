@@ -50,8 +50,8 @@ class MDRNN(nn.Module):
     
 
 class MRDNNCell(nn.Module):
-    """Model for one step forward"""
-    def __init__(self, latents: int, actions: int, hiddens: int, gaussians: int):
+    """Model for one step forward (training the controller)"""
+    def __init__(self, latents: int, actions: int, hiddens: int):
         super().__init__() 
         self.rnn = nn.LSTMCell(latents + actions, hiddens)
     

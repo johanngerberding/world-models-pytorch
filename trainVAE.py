@@ -4,8 +4,8 @@ import datetime
 import albumentations as A
 from torchvision.utils import save_image 
 
-from ..dataset import ObservationDataset 
-from ..models.vae import VAE
+from dataset import ObservationDataset 
+from models.vae import VAE
 
 def train_epoch(epoch: int) -> None:
     model.train() 
@@ -62,7 +62,7 @@ height = 64
 width = 64
 
 td = datetime.datetime.now().strftime("%Y-%m-%d")
-exp_dir = f"/home/mojo/dev/world-models-pytorch/VAE/exps/{td}_bs_{train_batch_size}_epochs_{num_epochs}_latentsize_{latent_size}"
+exp_dir = f"/home/mojo/dev/world-models-pytorch/exps/VAE/{td}_bs_{train_batch_size}_epochs_{num_epochs}_latentsize_{latent_size}"
 os.makedirs(exp_dir, exist_ok=False)
 weights_dir = os.path.join(exp_dir, "weights")
 os.makedirs(weights_dir)
