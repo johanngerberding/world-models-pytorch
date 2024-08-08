@@ -1,6 +1,8 @@
 """
 Data Generation Script for the VAE training
 """ 
+import shutil
+from datetime import datetime 
 import os 
 import argparse 
 import gymnasium as gym 
@@ -11,7 +13,7 @@ from multiprocessing import Pool
 def rollout(data):
     data_dir, seq_len, rollouts = data 
     os.makedirs(data_dir)
-    env = gym.make("CarRacing-v2")
+    env = gym.make("CarRacing-v2", continuous=False)
 
     for i in range(rollouts):
         env.reset()
@@ -32,7 +34,7 @@ def rollout(data):
             dones_rollout += [done]
 
             if done or truncated: 
-                print(f"End of rollout {i} | {t} frames") 
+                print(f"{data_dir.split('/')[-1]} | End of rollout {i} | {t} frames") 
                 np.savez(
                     os.path.join(data_dir, f"rollout_{i}"), 
                     observations=np.array(observations_rollout), 
@@ -48,10 +50,14 @@ if __name__ == "__main__":
     parser.add_argument('--rollouts', help="number of rollouts", type=int, default=10_000)
     parser.add_argument('--threads', help="number of threads", type=int, default=20)
     parser.add_argument('--seq_len', help="sequence length", type=int, default=1000)
-    parser.add_argument('--dir', help="output directory", type=str, default="data/vae")
+    parser.add_argument('--dir', help="output directory", type=str, default="/media/mojo/data/world-models")
     args = parser.parse_args()
     
-    os.makedirs(args.dir) 
+    data_folder = args.dir + f'/{datetime.now().strftime("%Y-%m-%d")}_rollouts-{args.rollouts}_seqlen-{args.seq_len}'
+    if os.path.exists(data_folder): 
+        shutil.rmtree(data_folder)
+    os.makedirs(data_folder, exist_ok=True) 
+        
     reps = args.rollouts // args.threads + 1
 
     p = Pool(args.threads)
