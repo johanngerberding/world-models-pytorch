@@ -88,7 +88,7 @@ class SequenceDataset(RolloutDataset):
             transformed_obs = self.transform(image=obs_data.astype(np.float32))
             obs_data = transformed_obs['image']
         obs, next_obs = obs_data[:-1], obs_data[1:]
-        action = data['actions'][idx:idx + self.seq_len + 1]
+        action = data['actions'][idx+1:idx + self.seq_len + 1]
         action = action.astype(np.float32)
         reward = data['rewards'][idx+1:idx + self.seq_len + 1].astype(np.float32)
         terminal = data['terminals'][idx+1:idx + self.seq_len + 1].astype(np.float32)

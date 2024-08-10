@@ -45,10 +45,10 @@ class MDRNN(nn.Module):
         # for the weighting for each gaussian 
         logpi = torch.nn.functional.log_softmax(pi, dim=-1)
 
-        rs = mdn_outs[:, :, -2]  # rewards
-        ds = mdn_outs[:, :, -1]  # dones
+        rewards = mdn_outs[:, :, -2]  # rewards
+        dones = mdn_outs[:, :, -1]  # dones
 
-        return mus, sigmas, logpi, rs, ds 
+        return mus, sigmas, logpi, rewards, dones 
     
 
 class MRDNNCell(nn.Module):

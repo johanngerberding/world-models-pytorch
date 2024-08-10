@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn 
 import torch.nn.functional as F 
 
+
 class Encoder(nn.Module): 
     """VAE Encoder""" 
     def __init__(self, latent_size: int, in_channels: int = 3):
@@ -30,6 +31,7 @@ class Encoder(nn.Module):
         logsigma = self.fc_log_sigma(x)
 
         return mu, logsigma 
+
 
 class Decoder(nn.Module): 
     """VAE Decoder""" 
@@ -73,23 +75,4 @@ class VAE(nn.Module):
         z = eps.mul(sigma).add_(mu) 
         reconst = self.decoder(z)
         return reconst, mu, logsigma 
-
-
-
-
-if __name__ == "__main__":
-
-    test = torch.randn(64, 3 , 64, 64)
-    print(torch.cuda.is_available())    
-    
-    model = VAE(1024, 3)
-    reconst, mu, logsigma = model(test)
-    print(reconst.shape) 
-    print(mu.shape)
-    print(logsigma.shape)
-
-    with torch.no_grad():
-        test = torch.randn(64, 1024)
-        test = model.decoder(test).cpu()
-        print(test.size())
 

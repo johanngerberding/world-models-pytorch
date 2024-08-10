@@ -11,11 +11,13 @@
 
 You can use the `generate_vae_data.py` script to generate a dataset for training the VAE model. Before you do this, make sure you have enough space on your disk (~260 GB).
 
+## Training 
+
+After you have generated your training dataset, you can use it to train your Variational Autoencoder Model. 
+
+
 
 ## Todos 
 
-* create a training script for the VAE 
 * add image transforms for the VAE training 
-* create the controller model
-* create the memory model 
 
