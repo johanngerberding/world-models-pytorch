@@ -1,12 +1,14 @@
-import os 
+import os
 import yaml
 import torch 
 import shutil
+from torchvision import transforms
 from torch.utils.data import DataLoader 
 from datetime import datetime
 from models.rnn import MDRNN
 from models.vae import VAE
 
+import numpy as np 
 from dataset import SequenceDataset
 
 cfg = yaml.safe_load(open("params.yaml"))
@@ -65,6 +67,32 @@ print(f"Len Test dataset: {len(test_dataset)}")
 train_dataloader = DataLoader(train_dataset, batch_size=rnn_cfg['batch_size'], num_workers=8)
 test_dataloader = DataLoader(test_dataset, batch_size=rnn_cfg['batch_size'], num_workers=8)
 
+def transform_to_latent(obs, model) -> torch.Tensor:
+    obs = obs / 255. 
+    obs = [torch.nn.functional.upsample(
+        frame.view(-1, 3, 96, 96), 
+        size=64, 
+        mode='bilinear', 
+        align_corners=True,
+    ) for frame in obs]
+
+    mus, sigmas = [], []
+    for frame in obs: 
+        _, mu, sigma = model(frame.to(device))
+        mus.append(mu) 
+        sigmas.append(sigma)
+    
+    latents = [] 
+    for mu, sigma in zip(mus, sigmas):
+        latent = mu + sigma.exp() * torch.randn_like(mu)
+        latents.append(latent) 
+    
+    latents = torch.stack(latents)
+    latents = latents.view(rnn_cfg['batch_size'], rnn_cfg['seq_len'], rnn_cfg['latent_size']) 
+
+    return latents 
+
+
 c = 0 
 for data in train_dataloader: 
     c += 1  
@@ -76,15 +104,13 @@ for data in train_dataloader:
     print(f"terminal shape: {terminal.shape}")
     print(f"next obs shape: {next_obs.shape}")
 
-    # use VAE to turn observation to latent 
+    # use VAE to turn observation and next_observation to latent 
     with torch.no_grad(): 
-        # vae input -> bs * seq_len, channels, img_width, img_height 
-        vae_obs = obs.view(-1, 3, cfg['vae']['width'], cfg['vae']['height']) 
-        print(vae_obs.size()) 
-        vae_obs = torch.nn.functional.upsample(vae_obs, size=64, mode='bilinear', align_corners=True) 
-        print(vae_obs.size()) 
-        # reconst, mu, logsigma = vae()
-
-    # 
+        latent = transform_to_latent(obs=obs, model=vae) 
+        print(latent.size()) 
+        next_obs_latent = transform_to_latent(obs=next_obs, model=vae) 
+        print(next_obs_latent.size())
+    
+    
     if c == 3:
         break 
