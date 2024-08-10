@@ -21,3 +21,4 @@ rnn:
   hidden_size: 256
   action_size: 3 
   learning_rate: 0.0001
+  include_reward: True

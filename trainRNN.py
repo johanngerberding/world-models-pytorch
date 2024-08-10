@@ -2,14 +2,14 @@ import os
 import yaml
 import torch 
 import shutil
-from torchvision import transforms
 from torch.utils.data import DataLoader 
 from datetime import datetime
+
 from models.rnn import MDRNN
 from models.vae import VAE
-
-import numpy as np 
+from losses import gmm_loss
 from dataset import SequenceDataset
+
 
 cfg = yaml.safe_load(open("params.yaml"))
 rnn_cfg = cfg['rnn']
@@ -105,12 +105,29 @@ for data in train_dataloader:
     print(f"next obs shape: {next_obs.shape}")
 
     # use VAE to turn observation and next_observation to latent 
-    with torch.no_grad(): 
+    with torch.no_grad():  
         latent = transform_to_latent(obs=obs, model=vae) 
-        print(latent.size()) 
         next_obs_latent = transform_to_latent(obs=next_obs, model=vae) 
-        print(next_obs_latent.size())
-    
-    
+
+    # prep data stuff
+
+    # mdrnn forward pass 
+    mus, sigmas, logpi, rewards, dones = mdrnn(action, latent)
+    # calculate losses 
+    gmm = gmm_loss(next_obs_latent, mus, sigmas, logpi) 
+    bce = torch.nn.functional.binary_cross_entropy_with_logits(dones, terminal)
+
+    if rnn_cfg['include_reward']: 
+        mse = torch.nn.functional.mse_loss(rewards, reward)
+
+    loss = (gmm + bce + mse) / 3
+    print(f"Loss: {loss}")
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+
+
     if c == 3:
         break 
