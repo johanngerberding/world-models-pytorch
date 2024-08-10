@@ -38,7 +38,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 
 transform = None 
 train_dataset = SequenceDataset(
-    root="/home/mojo/dev/world-models-pytorch/data", 
+    root="/data/world-models", 
     transform=transform, 
     train=True, 
     buffer_size=100, 
@@ -48,7 +48,7 @@ train_dataset = SequenceDataset(
 print(f"Len Train dataset: {len(train_dataset)}") 
 
 test_dataset = SequenceDataset(
-    root="/home/mojo/dev/world-models-pytorch/data", 
+    root="/data/world-models", 
     transform=transform,
     train=False, 
     buffer_size=100, 

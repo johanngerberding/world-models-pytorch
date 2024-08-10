@@ -48,9 +48,9 @@ def rollout(data):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser() 
     parser.add_argument('--rollouts', help="number of rollouts", type=int, default=10_000)
-    parser.add_argument('--threads', help="number of threads", type=int, default=20)
+    parser.add_argument('--threads', help="number of threads", type=int, default=24)
     parser.add_argument('--seq_len', help="sequence length", type=int, default=1000)
-    parser.add_argument('--dir', help="output directory", type=str, default="/media/mojo/data/world-models")
+    parser.add_argument('--dir', help="output directory", type=str, default="/data/world-models")
     args = parser.parse_args()
     
     data_folder = args.dir + f'/{datetime.now().strftime("%Y-%m-%d")}_rollouts-{args.rollouts}_seqlen-{args.seq_len}'
@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     p = Pool(args.threads)
     work = [
-        (os.path.join(args.dir, f"thread_{i}"), args.seq_len, reps) for i in range(args.threads)
+        (os.path.join(data_folder, f"thread_{i}"), args.seq_len, reps) for i in range(args.threads)
     ] 
     print(work)
     p.map(rollout, tuple(work))

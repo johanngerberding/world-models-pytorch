@@ -2,9 +2,9 @@ import torch
 from torch.distributions.normal import Normal 
 
 
-def mdn_loss(
+def gmm_loss(
         latent_next_obs: torch.Tensor, mus: torch.Tensor, sigmas: torch.Tensor, logpi: torch.Tensor, reduce: bool = True): 
-    """Compute the MDN Loss"""
+    """Compute the Gaussian Mixture Model Loss"""
     latent_next_obs = latent_next_obs.unsqueeze(-2)
     normal_dist = Normal(mus, sigmas)
     g_log_probs = normal_dist.log_prob(latent_next_obs)
@@ -15,5 +15,5 @@ def mdn_loss(
     probs = torch.sum(g_probs, dim=-1) 
     log_prob = max_log_probs.squeeze() + torch.log(probs) 
     if reduce: 
-        return - torch.mean(log_prob)
-    return - log_prob
+        return -torch.mean(log_prob)
+    return -log_prob

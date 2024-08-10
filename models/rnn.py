@@ -1,5 +1,6 @@
 import torch 
 import torch.nn as nn 
+import torch.nn.functional as f 
 
 
 class MDRNN(nn.Module):
@@ -19,7 +20,7 @@ class MDRNN(nn.Module):
             dropout=0,
             bidirectional=False 
         )
-        self.mdn = nn.Linear(
+        self.gmm = nn.Linear(
             in_features=hiddens,
             out_features=(2 * latents + 1) * gaussians + 2
         )
@@ -41,19 +42,50 @@ class MDRNN(nn.Module):
 
         pi = mdn_outs[:, :, 2*stride:2*stride + self.gaussians]
         pi = pi.view(seq_len, batch_size, self.gaussians)
+        # for the weighting for each gaussian 
         logpi = torch.nn.functional.log_softmax(pi, dim=-1)
 
-        rs = mdn_outs[:, :, -2]
-        ds = mdn_outs[:, :, -1]
+        rs = mdn_outs[:, :, -2]  # rewards
+        ds = mdn_outs[:, :, -1]  # dones
 
         return mus, sigmas, logpi, rs, ds 
     
 
 class MRDNNCell(nn.Module):
     """Model for one step forward (training the controller)"""
-    def __init__(self, latents: int, actions: int, hiddens: int):
+    def __init__(self, latents: int, actions: int, hiddens: int, gaussians: int):
         super().__init__() 
+        self.latents = latents 
+        self.actions = actions 
+        self.hiddens = hiddens 
+        self.gaussians = gaussians
         self.rnn = nn.LSTMCell(latents + actions, hiddens)
-    
-    def forward(self, action, latent, hidden):
-        pass
+        self.gmm = nn.Linear(
+            in_features=hiddens,
+            out_features=(2 * latents + 1) * gaussians + 2
+        )
+
+    def forward(self, action: torch.Tensor, latent: torch.Tensor, hidden: torch.Tensor) -> tuple:
+        """one step forward""" 
+        inputs = torch.cat([action, latent], dim=1) 
+        next_hidden = self.rnn(inputs, hidden)
+        out_rnn = next_hidden[0]
+        out_full = self.gmm(out_rnn)
+
+        stride = self.gaussians + self.latents
+        mus = out_full[:, :stride]
+        mus = mus.view(-1, self.gaussians, self.latents)
+
+        sigmas = out_full[:, stride: 2 * stride]
+        sigmas = sigmas.view(-1, self.gaussians, self.latents)
+        sigmas = torch.exp(sigmas)
+
+        pi = out_full[:, 2 * stride: 2 * stride + self.gaussians]
+        pi = pi.view(-1, self.gaussians)
+        logpi = f.log_softmax(pi, dim=-1)
+
+        rewards = out_full[:, -2]
+        dones = out_full[:, -1]
+
+        return mus, sigmas, logpi, rewards, dones, next_hidden
+
