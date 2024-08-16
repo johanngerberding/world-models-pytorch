@@ -4,7 +4,7 @@ import torch
 import shutil
 from torch.utils.data import DataLoader 
 from datetime import datetime
-
+import torch.nn.functional as F
 from models.rnn import MDRNN
 from models.vae import VAE
 from losses import gmm_loss
@@ -92,42 +92,70 @@ def transform_to_latent(obs, model) -> torch.Tensor:
 
     return latents 
 
+def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
+    if train: 
+        rnn.train()
+    else: 
+        rnn.eval()
+    
+    cum_loss = 0
+    for data in dataloader: 
+        obs, action, reward, terminal, next_obs = data 
+        obs = obs.to(device)
+        action = action.to(device)
+        next_obs = next_obs.to(device)
+        reward = reward.to(device)
+        terminal = terminal.to(device)
 
-c = 0 
-for data in train_dataloader: 
-    c += 1  
-    obs, action, reward, terminal, next_obs = data 
+        # use VAE to turn observation and next_observation to latent 
+        with torch.no_grad():  
+            latent = transform_to_latent(obs=obs, model=vae) 
+            next_obs_latent = transform_to_latent(obs=next_obs, model=vae) 
+        
+        # prep data stuff
+        latent = latent.transpose(1, 0)
+        next_obs_latent = next_obs_latent.transpose(1, 0)
 
-    print(f"obs shape: {obs.shape}")
-    print(f"action shape: {action.shape}")
-    print(f"reward shape: {reward.shape}")
-    print(f"terminal shape: {terminal.shape}")
-    print(f"next obs shape: {next_obs.shape}")
+        obs = obs.transpose(1, 0)
+        action = action.transpose(1, 0)
+        # add the action dimension
+        action = F.one_hot(action.to(torch.int64), num_classes=5)
+        next_obs = next_obs.transpose(1, 0)
+        reward = reward.transpose(1, 0)
+        terminal = terminal.transpose(1, 0)
 
-    # use VAE to turn observation and next_observation to latent 
-    with torch.no_grad():  
-        latent = transform_to_latent(obs=obs, model=vae) 
-        next_obs_latent = transform_to_latent(obs=next_obs, model=vae) 
+        # mdrnn forward pass 
+        mus, sigmas, logpi, rewards, dones = rnn(action, latent)
+        # calculate losses 
+        gmm = gmm_loss(next_obs_latent, mus, sigmas, logpi) 
+        bce = torch.nn.functional.binary_cross_entropy_with_logits(dones, terminal)
 
-    # prep data stuff
+        if rnn_cfg['include_reward']: 
+            mse = torch.nn.functional.mse_loss(rewards, reward)
+            scale = rnn_cfg['seq_len'] + 2
+        else: 
+            mse = 0
+            scale = rnn_cfg['seq_len'] + 1 
 
-    # mdrnn forward pass 
-    mus, sigmas, logpi, rewards, dones = mdrnn(action, latent)
-    # calculate losses 
-    gmm = gmm_loss(next_obs_latent, mus, sigmas, logpi) 
-    bce = torch.nn.functional.binary_cross_entropy_with_logits(dones, terminal)
+        loss = (gmm + bce + mse) / scale
+        print(f"Loss: {loss}")
+        cum_loss += loss        
+        if train:
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-    if rnn_cfg['include_reward']: 
-        mse = torch.nn.functional.mse_loss(rewards, reward)
-
-    loss = (gmm + bce + mse) / 3
-    print(f"Loss: {loss}")
-
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
+    return cum_loss * (rnn_cfg['batch_size']) / len(dataloader.dataset)
 
 
-    if c == 3:
-        break 
+cur_best = None 
+
+for e in range(rnn_cfg['num_epochs']):
+    step(train_dataloader, mdrnn, vae, optimizer, True)
+    test_loss = step(test_dataloader, mdrnn, vae, optimizer, False)
+
+    is_best = not cur_best or test_loss < cur_best
+    if is_best: 
+        cur_best = is_best
+        print(f"New best model, loss: {cur_best}")
+

@@ -30,7 +30,7 @@ class MDRNN(nn.Module):
         seq_len, batch_size = actions.size(0), actions.size(1)
         inputs = torch.cat([actions, latents], dim=-1) 
         outs, _ = self.rnn(inputs)
-        mdn_outs = self.mdn(outs)
+        mdn_outs = self.gmm(outs)
 
         stride = self.gaussians * self.latents  
         mus = mdn_outs[:, :, :stride]
