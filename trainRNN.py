@@ -48,7 +48,7 @@ train_dataset = SequenceDataset(
     root="/data/world-models", 
     transform=transform, 
     train=True, 
-    buffer_size=100, 
+    buffer_size=30, 
     num_test_files=600, 
     seq_len=rnn_cfg['seq_len'],
 )
@@ -58,11 +58,16 @@ test_dataset = SequenceDataset(
     root="/data/world-models", 
     transform=transform,
     train=False, 
-    buffer_size=100, 
+    buffer_size=10, 
     num_test_files=600,
     seq_len=rnn_cfg['seq_len'],
 )
 print(f"Len Test dataset: {len(test_dataset)}")
+
+# maybe this is needed because of some bugs while training
+def collate_fn(batch): 
+    ...
+
 
 train_dataloader = DataLoader(train_dataset, batch_size=rnn_cfg['batch_size'], num_workers=8)
 test_dataloader = DataLoader(test_dataset, batch_size=rnn_cfg['batch_size'], num_workers=8)
@@ -106,7 +111,7 @@ def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
         next_obs = next_obs.to(device)
         reward = reward.to(device)
         terminal = terminal.to(device)
-
+        print(obs.shape)
         # use VAE to turn observation and next_observation to latent 
         with torch.no_grad():  
             latent = transform_to_latent(obs=obs, model=vae) 
