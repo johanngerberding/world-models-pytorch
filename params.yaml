@@ -13,7 +13,7 @@ rnn:
   data_dir: "/data/world-models" 
   vae_dir: "/home/mojo/github/world-models-pytorch/exps/VAE/2024-08-10_bs_512_epochs_50_latentsize_64"
   device: "cuda" 
-  seq_len: 32 
+  seq_len: 100 
   batch_size: 16 
   num_epochs: 10 
   latent_size: 64

@@ -1,6 +1,7 @@
 import os
 import yaml
 import torch 
+import tqdm
 import shutil
 from torch.utils.data import DataLoader 
 from datetime import datetime
@@ -48,29 +49,74 @@ train_dataset = SequenceDataset(
     root="/data/world-models", 
     transform=transform, 
     train=True, 
-    buffer_size=30, 
+    buffer_size=16, 
     num_test_files=600, 
     seq_len=rnn_cfg['seq_len'],
 )
-print(f"Len Train dataset: {len(train_dataset)}") 
+print(f"Len Train dataset: {len(train_dataset.files)}") 
 
 test_dataset = SequenceDataset(
     root="/data/world-models", 
     transform=transform,
     train=False, 
-    buffer_size=10, 
+    buffer_size=16, 
     num_test_files=600,
     seq_len=rnn_cfg['seq_len'],
 )
-print(f"Len Test dataset: {len(test_dataset)}")
+print(f"Len Test dataset: {len(test_dataset.files)}")
 
 # maybe this is needed because of some bugs while training
 def collate_fn(batch): 
-    ...
+    # print(f"batch: {len(batch)}")
+    obss = [] 
+    actions = [] 
+    rewards = []   
+    terminals = []
+    next_obss = [] 
+    for sample in batch: 
+        obs, action, reward, terminal, next_obs = sample 
+        obss.append(torch.tensor(obs))
+        actions.append(torch.tensor(action))
+        rewards.append(torch.tensor(reward))
+        terminals.append(torch.tensor(terminal))
+        next_obss.append(torch.tensor(next_obs))
+
+    # print(f"obs: {obss[8].shape}")
+    # print(f"actions: {actions[8].shape}")
+    # print(f"rewards: {rewards[8].shape}")
+    # print(f"terminal: {terminals[8].shape}")
+    # print(f"next obs: {next_obss[8].shape}")
+    # print(f"terminals: {terminals[8]}")
+
+    obss = torch.stack(obss)
+    actions = torch.stack(actions) 
+    rewards = torch.stack(rewards)
+    terminals = torch.stack(terminals)
+    next_obss = torch.stack(next_obss)
+
+    # print(f"obs: {obss.shape}")
+    # print(f"actions: {actions.shape}")
+    # print(f"rewards: {rewards.shape}")
+    # print(f"terminal: {terminals.shape}")
+    # print(terminal)
+    # print(f"next obs: {next_obss.shape}")
+    
+    return obss, actions, rewards, terminals, next_obss
 
 
-train_dataloader = DataLoader(train_dataset, batch_size=rnn_cfg['batch_size'], num_workers=8)
-test_dataloader = DataLoader(test_dataset, batch_size=rnn_cfg['batch_size'], num_workers=8)
+train_dataloader = DataLoader(
+    train_dataset, 
+    batch_size=rnn_cfg['batch_size'], 
+    num_workers=8,
+    collate_fn=collate_fn,
+)
+
+test_dataloader = DataLoader(
+    test_dataset, 
+    batch_size=rnn_cfg['batch_size'], 
+    num_workers=8, 
+    collate_fn=collate_fn,
+)
 
 def transform_to_latent(obs, model) -> torch.Tensor:
     obs = obs / 255. 
@@ -102,9 +148,11 @@ def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
         rnn.train()
     else: 
         rnn.eval()
+
+    dataloader.dataset.load_next_buffer()
     
     cum_loss = 0
-    for data in dataloader: 
+    for data in tqdm.tqdm(dataloader): 
         obs, action, reward, terminal, next_obs = data 
         obs = obs.to(device)
         action = action.to(device)
