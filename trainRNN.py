@@ -22,7 +22,6 @@ device = torch.device(rnn_cfg['device'] if torch.cuda.is_available() else "cpu")
 vae_weights = os.path.join(rnn_cfg['vae_dir'], "weights", "best.pth")
 vae = VAE(latent_size=rnn_cfg['latent_size'], in_channels=3) 
 vae.load_state_dict(torch.load(vae_weights)) 
-print(vae)
 print("Loaded VAE.")
 vae.to(device)
 
@@ -67,12 +66,7 @@ print(f"Len Test dataset: {len(test_dataset.files)}")
 
 # maybe this is needed because of some bugs while training
 def collate_fn(batch): 
-    # print(f"batch: {len(batch)}")
-    obss = [] 
-    actions = [] 
-    rewards = []   
-    terminals = []
-    next_obss = [] 
+    obss, actions, rewards, terminals, next_obss = [], [], [], [], []
     for sample in batch: 
         obs, action, reward, terminal, next_obs = sample 
         obss.append(torch.tensor(obs))
@@ -81,26 +75,20 @@ def collate_fn(batch):
         terminals.append(torch.tensor(terminal))
         next_obss.append(torch.tensor(next_obs))
 
-    # print(f"obs: {obss[8].shape}")
-    # print(f"actions: {actions[8].shape}")
-    # print(f"rewards: {rewards[8].shape}")
-    # print(f"terminal: {terminals[8].shape}")
-    # print(f"next obs: {next_obss[8].shape}")
-    # print(f"terminals: {terminals[8]}")
+    # cut all to min seq len in batch 
+    _seq_len = min([ob.shape[0] for ob in obss]) 
+    obss = [ob[:_seq_len, :, :, :] for ob in obss]
+    actions = [act[:_seq_len] for act in actions] 
+    rewards = [rew[:_seq_len] for rew in rewards] 
+    terminals = [ter[:_seq_len] for ter in terminals] 
+    next_obss = [nob[:_seq_len, :, :, :] for nob in next_obss] 
 
     obss = torch.stack(obss)
     actions = torch.stack(actions) 
     rewards = torch.stack(rewards)
     terminals = torch.stack(terminals)
     next_obss = torch.stack(next_obss)
-
-    # print(f"obs: {obss.shape}")
-    # print(f"actions: {actions.shape}")
-    # print(f"rewards: {rewards.shape}")
-    # print(f"terminal: {terminals.shape}")
-    # print(terminal)
-    # print(f"next obs: {next_obss.shape}")
-    
+   
     return obss, actions, rewards, terminals, next_obss
 
 
@@ -109,6 +97,7 @@ train_dataloader = DataLoader(
     batch_size=rnn_cfg['batch_size'], 
     num_workers=8,
     collate_fn=collate_fn,
+    drop_last=True,
 )
 
 test_dataloader = DataLoader(
@@ -116,6 +105,7 @@ test_dataloader = DataLoader(
     batch_size=rnn_cfg['batch_size'], 
     num_workers=8, 
     collate_fn=collate_fn,
+    drop_last=True,
 )
 
 def transform_to_latent(obs, model) -> torch.Tensor:
@@ -159,7 +149,14 @@ def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
         next_obs = next_obs.to(device)
         reward = reward.to(device)
         terminal = terminal.to(device)
-        print(obs.shape)
+
+        # at the end of the rollout you will have shorter seq_len than 100
+        # this makes the training work, but it is a bit hacky and I think there is 
+        # a better way of doing it 
+        if obs.shape[1] != 100: 
+            dataloader.dataset.load_next_buffer()
+            continue
+
         # use VAE to turn observation and next_observation to latent 
         with torch.no_grad():  
             latent = transform_to_latent(obs=obs, model=vae) 
