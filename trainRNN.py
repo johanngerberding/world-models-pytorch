@@ -142,7 +142,11 @@ def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
     dataloader.dataset.load_next_buffer()
     
     cum_loss = 0
-    for data in tqdm.tqdm(dataloader): 
+    cum_gmm = 0 
+    cum_mse = 0 
+    cum_bce = 0 
+
+    for i, data in tqdm.tqdm(enumerate(dataloader)): 
         obs, action, reward, terminal, next_obs = data 
         obs = obs.to(device)
         action = action.to(device)
@@ -188,19 +192,26 @@ def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
             scale = rnn_cfg['seq_len'] + 1 
 
         loss = (gmm + bce + mse) / scale
-        print(f"Loss: {loss}")
         cum_loss += loss        
+        cum_gmm += gmm 
+        cum_mse += mse 
+        cum_bce += bce 
+
+        print(f"Loss: {cum_loss / (i + 1):10.6f} | BCE: {cum_bce / (i + 1):10.6f} | GMM: {cum_gmm / rnn_cfg['latent_size'] / (i + 1):10.6f} | MSE: {cum_mse / (i + 1):10.6f}")
+         
         if train:
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
+    # not sure if that is correct 
     return cum_loss * (rnn_cfg['batch_size']) / len(dataloader.dataset)
 
 
 cur_best = None 
 
 for e in range(rnn_cfg['num_epochs']):
+    print(f"---------- EPOCH {e + 1} ----------") 
     step(train_dataloader, mdrnn, vae, optimizer, True)
     test_loss = step(test_dataloader, mdrnn, vae, optimizer, False)
 

@@ -14,7 +14,7 @@ rnn:
   vae_dir: "/home/mojo/github/world-models-pytorch/exps/VAE/2024-08-10_bs_512_epochs_50_latentsize_64"
   device: "cuda" 
   seq_len: 100 
-  batch_size: 16 
+  batch_size: 8 
   num_epochs: 10 
   latent_size: 64
   num_gaussians: 5  # from the paper 
