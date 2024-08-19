@@ -11,10 +11,12 @@ from models.vae import VAE
 from losses import gmm_loss
 from dataset import SequenceDataset
 
+from utils import collate_fn, transform_to_latent
+
 
 cfg = yaml.safe_load(open("params.yaml"))
 rnn_cfg = cfg['rnn']
-print(f"MDN-RNN Training Configuration: {rnn_cfg}")
+print(f"MDN-RNN Training Configuration: \n{rnn_cfg}")
 
 device = torch.device(rnn_cfg['device'] if torch.cuda.is_available() else "cpu")
 
@@ -48,7 +50,7 @@ train_dataset = SequenceDataset(
     root="/data/world-models", 
     transform=transform, 
     train=True, 
-    buffer_size=16, 
+    buffer_size=rnn_cfg['buffer_size'], 
     num_test_files=600, 
     seq_len=rnn_cfg['seq_len'],
 )
@@ -58,44 +60,16 @@ test_dataset = SequenceDataset(
     root="/data/world-models", 
     transform=transform,
     train=False, 
-    buffer_size=16, 
+    buffer_size=rnn_cfg['buffer_size'], 
     num_test_files=600,
     seq_len=rnn_cfg['seq_len'],
 )
 print(f"Len Test dataset: {len(test_dataset.files)}")
 
-# maybe this is needed because of some bugs while training
-def collate_fn(batch): 
-    obss, actions, rewards, terminals, next_obss = [], [], [], [], []
-    for sample in batch: 
-        obs, action, reward, terminal, next_obs = sample 
-        obss.append(torch.tensor(obs))
-        actions.append(torch.tensor(action))
-        rewards.append(torch.tensor(reward))
-        terminals.append(torch.tensor(terminal))
-        next_obss.append(torch.tensor(next_obs))
-
-    # cut all to min seq len in batch 
-    _seq_len = min([ob.shape[0] for ob in obss]) 
-    obss = [ob[:_seq_len, :, :, :] for ob in obss]
-    actions = [act[:_seq_len] for act in actions] 
-    rewards = [rew[:_seq_len] for rew in rewards] 
-    terminals = [ter[:_seq_len] for ter in terminals] 
-    next_obss = [nob[:_seq_len, :, :, :] for nob in next_obss] 
-
-    obss = torch.stack(obss)
-    actions = torch.stack(actions) 
-    rewards = torch.stack(rewards)
-    terminals = torch.stack(terminals)
-    next_obss = torch.stack(next_obss)
-   
-    return obss, actions, rewards, terminals, next_obss
-
-
 train_dataloader = DataLoader(
     train_dataset, 
     batch_size=rnn_cfg['batch_size'], 
-    num_workers=8,
+    num_workers=rnn_cfg['train_num_workers'],
     collate_fn=collate_fn,
     drop_last=True,
 )
@@ -103,37 +77,13 @@ train_dataloader = DataLoader(
 test_dataloader = DataLoader(
     test_dataset, 
     batch_size=rnn_cfg['batch_size'], 
-    num_workers=8, 
+    num_workers=rnn_cfg['test_num_workers'], 
     collate_fn=collate_fn,
     drop_last=True,
 )
 
-def transform_to_latent(obs, model) -> torch.Tensor:
-    obs = obs / 255. 
-    obs = [torch.nn.functional.upsample(
-        frame.view(-1, 3, 96, 96), 
-        size=64, 
-        mode='bilinear', 
-        align_corners=True,
-    ) for frame in obs]
 
-    mus, sigmas = [], []
-    for frame in obs: 
-        _, mu, sigma = model(frame.to(device))
-        mus.append(mu) 
-        sigmas.append(sigma)
-    
-    latents = [] 
-    for mu, sigma in zip(mus, sigmas):
-        latent = mu + sigma.exp() * torch.randn_like(mu)
-        latents.append(latent) 
-    
-    latents = torch.stack(latents)
-    latents = latents.view(rnn_cfg['batch_size'], rnn_cfg['seq_len'], rnn_cfg['latent_size']) 
-
-    return latents 
-
-def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
+def step(dataloader, rnn, vae, optimizer, train: bool, epoch: int) -> float:
     if train: 
         rnn.train()
     else: 
@@ -146,7 +96,8 @@ def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
     cum_mse = 0 
     cum_bce = 0 
 
-    for i, data in tqdm.tqdm(enumerate(dataloader)): 
+    pbar = tqdm.tqdm(total=len(dataloader.dataset), desc=f"Epoch {epoch + 1} ")
+    for i, data in enumerate(dataloader): 
         obs, action, reward, terminal, next_obs = data 
         obs = obs.to(device)
         action = action.to(device)
@@ -157,14 +108,16 @@ def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
         # at the end of the rollout you will have shorter seq_len than 100
         # this makes the training work, but it is a bit hacky and I think there is 
         # a better way of doing it 
-        if obs.shape[1] != 100: 
+        # when the seq-len gets shorter than 20 we load the next buffer 
+        if obs.shape[1] <= 20: 
             dataloader.dataset.load_next_buffer()
+            pbar.update(rnn_cfg['batch_size'])
             continue
 
         # use VAE to turn observation and next_observation to latent 
         with torch.no_grad():  
-            latent = transform_to_latent(obs=obs, model=vae) 
-            next_obs_latent = transform_to_latent(obs=next_obs, model=vae) 
+            latent = transform_to_latent(obs=obs, model=vae, device=device, rnn_cfg=rnn_cfg) 
+            next_obs_latent = transform_to_latent(obs=next_obs, model=vae, device=device, rnn_cfg=rnn_cfg) 
         
         # prep data stuff
         latent = latent.transpose(1, 0)
@@ -192,18 +145,24 @@ def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
             scale = rnn_cfg['seq_len'] + 1 
 
         loss = (gmm + bce + mse) / scale
-        cum_loss += loss        
-        cum_gmm += gmm 
-        cum_mse += mse 
-        cum_bce += bce 
-
-        print(f"Loss: {cum_loss / (i + 1):10.6f} | BCE: {cum_bce / (i + 1):10.6f} | GMM: {cum_gmm / rnn_cfg['latent_size'] / (i + 1):10.6f} | MSE: {cum_mse / (i + 1):10.6f}")
-         
         if train:
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+        
+        cum_loss += loss.item()        
+        cum_gmm += gmm.item()
+        cum_mse += mse.item() 
+        cum_bce += bce.item() 
 
+        pbar.set_postfix_str(
+            "loss={loss:5.4f} | bce={bce:5.4f} | gmm={gmm:5.4f} | mse={mse:5.4f}".format(
+                loss=cum_loss / (i + 1), bce=cum_bce / (1 + i), gmm=cum_gmm / rnn_cfg['latent_size'] / (1 + i), mse=cum_mse / (i + 1)
+            )
+        )
+        pbar.update(rnn_cfg["batch_size"])
+
+    pbar.close()
     # not sure if that is correct 
     return cum_loss * (rnn_cfg['batch_size']) / len(dataloader.dataset)
 
@@ -211,12 +170,21 @@ def step(dataloader, rnn, vae, optimizer, train: bool) -> float:
 cur_best = None 
 
 for e in range(rnn_cfg['num_epochs']):
-    print(f"---------- EPOCH {e + 1} ----------") 
-    step(train_dataloader, mdrnn, vae, optimizer, True)
-    test_loss = step(test_dataloader, mdrnn, vae, optimizer, False)
+    step(train_dataloader, mdrnn, vae, optimizer, True, e)
+    test_loss = step(test_dataloader, mdrnn, vae, optimizer, False, e)
+    scheduler.step(test_loss)
 
     is_best = not cur_best or test_loss < cur_best
     if is_best: 
         cur_best = is_best
-        print(f"New best model, loss: {cur_best}")
+        print(f"New best model, loss: {test_loss:10.6f}")
 
+    checkpoint_path = os.path.join(mdrnn_dir, f"checkpoint-epoch-{str(e + 1).zfill(3)}.pth")
+    torch.save(
+        {
+            'epoch': e, 
+            'model_state_dict': mdrnn.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'test_loss': test_loss,
+        }, checkpoint_path
+    )
